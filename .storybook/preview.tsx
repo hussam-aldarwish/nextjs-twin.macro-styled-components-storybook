@@ -1,3 +1,4 @@
+import { INITIAL_VIEWPORTS, MINIMAL_VIEWPORTS } from '@storybook/addon-viewport';
 import type { Decorator, Preview } from '@storybook/react';
 import React from 'react';
 import GlobalStyles from '../src/styles/GlobalStyles';
@@ -15,6 +16,12 @@ const preview: Preview = {
       matchers: {
         color: /(background|color)$/i,
         date: /Date$/i,
+      },
+    },
+    viewport: {
+      viewports: {
+        ...INITIAL_VIEWPORTS,
+        ...MINIMAL_VIEWPORTS,
       },
     },
     nextjs: {
