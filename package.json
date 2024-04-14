@@ -25,6 +25,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
+    "@storybook/addon-viewport": "^8.0.8",
     "classnames": "^2.5.1",
     "next": "14.2.1",
     "react": "^18",
