@@ -52,7 +52,7 @@
     "babel-plugin-styled-components": "^2.1.4",
     "conventional-changelog": "^5.1.0",
     "eslint": "^8",
-    "eslint-config-next": "14.1.4",
+    "eslint-config-next": "14.2.1",
     "eslint-plugin-storybook": "^0.8.0",
     "husky": "^9.0.11",
     "keep-a-changelog": "^2.5.3",
