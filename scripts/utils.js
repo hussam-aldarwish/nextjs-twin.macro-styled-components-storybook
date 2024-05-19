@@ -1,4 +1,4 @@
-const { exec } = require('node:child_process');
+const { exec } = require('child_process');
 
 function runCommand(command) {
   return new Promise((resolve, reject) => {
@@ -13,14 +13,22 @@ function runCommand(command) {
   });
 }
 
+async function uncommittedChanges() {
+  return runCommand('git status --porcelain');
+}
+
+function gitBranchName() {
+  return runCommand('git rev-parse --abbrev-ref HEAD');
+}
+
 async function validateUncommittedChanges() {
-  const hasUncommittedChanges = await runCommand('git status --porcelain');
+  const hasUncommittedChanges = await uncommittedChanges();
   if (hasUncommittedChanges) {
     throw new Error('Uncommitted changes detected. Aborting.');
   }
 }
 
-module.exports = {
-  runCommand,
-  validateUncommittedChanges,
-};
+exports.runCommand = runCommand;
+exports.uncommittedChanges = uncommittedChanges;
+exports.gitBranchName = gitBranchName;
+exports.validateUncommittedChanges = validateUncommittedChanges;
