@@ -1,14 +1,6 @@
 import { INITIAL_VIEWPORTS, MINIMAL_VIEWPORTS } from '@storybook/addon-viewport';
-import type { Decorator, Preview } from '@storybook/react';
-import React from 'react';
-import GlobalStyles from '../src/styles/GlobalStyles';
-
-const withGlobalStyles: Decorator = (Story, context) => (
-  <>
-    <GlobalStyles />
-    <Story {...context} />
-  </>
-);
+import type { Preview } from '@storybook/react';
+import decorators from './decorators';
 
 const preview: Preview = {
   parameters: {
@@ -28,7 +20,7 @@ const preview: Preview = {
       appDirectory: true,
     },
   },
-  decorators: withGlobalStyles,
+  decorators,
 };
 
 export default preview;

@@ -1,38 +1,31 @@
 const { inc } = require('semver');
+const { gitBranchName, runCommand, validateUncommittedChanges } = require('./utils');
 const readlineSync = require('readline-sync');
-const conventionalChangelog = require('conventional-changelog');
-const { Writable } = require('node:stream');
-const { parser, Changelog, Release } = require('keep-a-changelog');
-const { readFileSync, writeFileSync } = require('node:fs');
-const { runCommand, validateUncommittedChanges } = require('./utils');
+const WriteStream = require('./WriteStream');
+
+main()
+  .then(() => console.log('Script execution complete.'))
+  .catch((error) => console.error(`Error: ${error.message}`))
+  .finally(() => process.exit(0));
 
 async function main() {
-  try {
-    await validateUncommittedChanges();
-    const branchName = await gitBranchName();
+  await validateUncommittedChanges();
+  const branchName = await gitBranchName();
 
-    switch (branchName) {
-      case 'develop':
-        await handleDevelopBranch();
-        break;
-      case 'main':
-        await handleMainBranch();
-        break;
-      default:
-        if (branchName.startsWith('hotfix/')) {
-          await handleHotfixBranch(branchName);
-        } else {
-          throw new Error(
-            `Error: Current branch is '${branchName}'. Please switch to 'main', 'develop', or 'hotfix/<name>' before proceeding.`,
-          );
-        }
-    }
-
-    console.log('Script execution complete.');
-  } catch (error) {
-    console.error(`Error: ${error.message}`);
-  } finally {
-    process.exit(0);
+  switch (true) {
+    case branchName === 'develop':
+      await handleDevelopBranch();
+      return;
+    case branchName === 'main':
+      await handleMainBranch();
+      return;
+    case branchName.startsWith('hotfix/'):
+      await handleHotfixBranch(branchName);
+      return;
+    default:
+      throw new Error(
+        `Error: Current branch is '${branchName}'. Please switch to 'main', 'develop', or 'hotfix/<name>' before proceeding.`,
+      );
   }
 }
 
@@ -42,21 +35,25 @@ async function handleDevelopBranch() {
     'Select the release type:',
   );
 
-  const preReleaseIdentifier = releaseType.startsWith('pre')
-    ? promptUser(['alpha', 'beta', 'rc'], 'Select the pre-release identifier:')
-    : null;
+  let preReleaseIdentifier;
+  if (releaseType.startsWith('pre')) {
+    preReleaseIdentifier = promptUser(
+      ['alpha', 'beta', 'rc'],
+      'Select the pre-release identifier:',
+    );
+  }
 
   const newVersion = getNewVersion(releaseType, preReleaseIdentifier);
 
   console.log(`Starting release process for version v${newVersion}...`);
-  await runGitFlowCommand(`release start v${newVersion}`);
+  await runCommand(`git flow release start v${newVersion}`);
 
   await bumpVersion(newVersion);
   await generateChangelog(newVersion);
   await commitChanges(newVersion);
 
   console.log(`Finishing release process for version v${newVersion}...`);
-  await runGitFlowCommand(`release finish v${newVersion} -m "Release v${newVersion}"`);
+  await runCommand(`git flow release finish v${newVersion} -m "Release v${newVersion}"`);
 
   console.log(`Release process for version v${newVersion} complete!`);
   await pushChanges();
@@ -68,14 +65,18 @@ async function handleMainBranch() {
     'Select the hotfix release type:',
   );
 
-  const preReleaseIdentifier = releaseType.startsWith('pre')
-    ? promptUser(['alpha', 'beta', 'rc'], 'Select the pre-release identifier:')
-    : null;
+  let preReleaseIdentifier;
+  if (releaseType.startsWith('pre')) {
+    preReleaseIdentifier = promptUser(
+      ['alpha', 'beta', 'rc'],
+      'Select the pre-release identifier:',
+    );
+  }
 
   const newVersion = getNewVersion(releaseType, preReleaseIdentifier);
 
   console.log(`Starting hotfix release process for version v${newVersion}...`);
-  await runGitFlowCommand(`hotfix start v${newVersion}`);
+  await runCommand(`git flow hotfix start v${newVersion}`);
 }
 
 async function handleHotfixBranch(branchName) {
@@ -86,7 +87,7 @@ async function handleHotfixBranch(branchName) {
   await commitChanges(newVersion);
 
   console.log('Finishing hotfix release process...');
-  await runGitFlowCommand(`hotfix finish v${newVersion} -m "v${newVersion}"`);
+  await runCommand(`git flow hotfix finish v${newVersion} -m "v${newVersion}"`);
   await pushChanges();
 }
 
@@ -97,42 +98,49 @@ function getNewVersion(releaseType, preReleaseIdentifier) {
 
 async function bumpVersion(newVersion) {
   console.log(`Bumping version to v${newVersion}...`);
-  await runNpmVersionCommand(`${newVersion} --no-git-tag-version`);
+  await runCommand(`npm version ${newVersion} --no-git-tag-version`);
 }
 
 async function generateChangelog(newVersion) {
   return new Promise((resolve, reject) => {
+    if (!newVersion) {
+      reject(new Error('Error: Invalid version.'));
+    }
     console.log('Generating changelog...');
     const customStream = new WriteStream();
-    conventionalChangelog({
-      releaseCount: 1,
-    })
-      .on('error', reject)
-      .pipe(customStream)
-      .on('finish', async () => {
-        await runNpxChangelogCommand(`--release ${newVersion}`);
-        resolve();
-      });
+    import('conventional-changelog').then(({ default: conventionalChangelog }) => {
+      conventionalChangelog({
+        releaseCount: 1,
+      })
+        .on('error', (error) => {
+          reject(error);
+        })
+        .pipe(customStream)
+        .on('finish', async () => {
+          await runCommand(`npx changelog --release ${newVersion}`);
+          resolve();
+        });
+    });
   });
 }
 
 async function commitChanges(newVersion) {
   console.log('Committing changes...');
-  await runGitCommand('add package.json package-lock.json CHANGELOG.md');
-  await runGitCommand(
-    `commit -m "chore(release): :bookmark: bump version to v${newVersion} and update CHANGELOG.md"`,
+  await runCommand('git add package.json package-lock.json CHANGELOG.md');
+  await runCommand(
+    `git commit -m "chore(release): :bookmark: bump version to v${newVersion} and update CHANGELOG.md"`,
   );
 }
 
 async function pushChanges() {
   console.log('Pushing changes...');
   if (readlineSync.keyInYN('Would you like to push the changes to the remote repository?')) {
-    await runGitCommand('push --follow-tags origin main develop');
-  } else {
-    console.log('Changes not pushed to remote.');
-    console.log('Please run the following commands to push changes:');
-    console.log('git push --follow-tags origin main develop');
+    await runCommand('git push --follow-tags origin main develop');
+    return;
   }
+  console.log('Changes not pushed to remote.');
+  console.log('Please run the following commands to push changes:');
+  console.log('git push --follow-tags origin main develop');
 }
 
 function promptUser(options, message = 'Select an option:') {
@@ -154,79 +162,3 @@ function promptUser(options, message = 'Select an option:') {
 
   return options[selectedIndex];
 }
-
-function gitBranchName() {
-  return runCommand('git rev-parse --abbrev-ref HEAD');
-}
-
-async function runGitFlowCommand(command) {
-  await runCommand(`git flow ${command}`);
-}
-
-async function runNpmVersionCommand(args) {
-  await runCommand(`npm version ${args}`);
-}
-
-async function runNpxChangelogCommand(args) {
-  await runCommand(`npx changelog ${args}`);
-}
-
-async function runGitCommand(args) {
-  await runCommand(`git ${args}`);
-}
-
-class WriteStream extends Writable {
-  constructor(path, options) {
-    super(options);
-    this.path = path ?? './CHANGELOG.md';
-  }
-
-  _readChangelog() {
-    try {
-      return parser(readFileSync(this.path, 'utf-8'));
-    } catch (e) {
-      return new Changelog('Changelog');
-    }
-  }
-
-  _getUnreleased(changelog) {
-    return changelog.findRelease() ?? changelog.addRelease(new Release()).findRelease();
-  }
-
-  _write(chunk, encoding, callback) {
-    const changelog = this._readChangelog();
-    const unreleased = this._getUnreleased(changelog);
-    changelog.format = 'markdownlint';
-
-    const data = chunk
-      .toString()
-      .trim()
-      .split('\n')
-      .slice(2)
-      .map((line) => line.trim().slice(2));
-
-    const commitType = (commit) => {
-      switch (true) {
-        case commit.startsWith('feat'):
-          return 'added';
-        case commit.startsWith('fix'):
-          return 'fixed';
-        default:
-          return 'changed';
-      }
-    };
-
-    data.forEach((commit) => {
-      unreleased.addChange(commitType(commit), commit);
-    });
-
-    writeFileSync(this.path, changelog.toString());
-    callback();
-  }
-
-  _final(callback) {
-    callback();
-  }
-}
-
-main();
