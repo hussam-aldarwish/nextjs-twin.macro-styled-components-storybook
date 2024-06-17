@@ -56,7 +56,7 @@
     "eslint-plugin-storybook": "^0.8.0",
     "husky": "^9.0.11",
     "keep-a-changelog": "^2.5.3",
-    "lint-staged": "^15.2.5",
+    "lint-staged": "^15.2.7",
     "postcss": "^8",
     "prettier": "^3.3.2",
     "prettier-plugin-twin.macro": "^1.0.14",
